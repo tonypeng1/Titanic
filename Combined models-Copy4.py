@@ -242,6 +242,49 @@ print('SD (logis): '+str(scores_logis.std()))
 # print('SD (logis): '+str(scores_logis.std()))
 # -
 
+# ### 2. Second Model: Random Forest
+
+# set max_features normal distribution sample array
+num_feature = X_1.shape[1]
+max_feature = norm.rvs(np.sqrt(num_feature), 2, size=200, random_state=42).astype(int)
+max_feature[max_feature <= 0] = 1
+max_feature[max_feature > num_feature] = num_feature
+max_feature
+
+# set min_samples_split normal distribution sample array
+min_sample_split = norm.rvs(4, 2, size=200, random_state=42).astype(int)
+min_sample_split[min_sample_split <= 1] = 2
+min_sample_split
+
+rf = RandomForestClassifier(random_state=42)
+parameter_grid = {
+                 'n_estimators': np.arange(50, 800, step=5),
+                 'max_features': max_feature,
+                 'min_samples_split': min_sample_split,
+                 'min_samples_leaf': np.arange(1, 5, 1),
+                 'bootstrap': [True, False]
+                 }
+grid_random = RandomizedSearchCV(rf, parameter_grid, n_iter=100, cv= cv_splitter, 
+                                 random_state=42, refit=True, n_jobs=-1)
+grid_random.fit(X_1, y)
+
+random_forest_best_param = grid_random.best_params_  
+random_forest_best_param
+# best parameter values to be used in the stack model
+
+grid_random.n_splits_
+
+grid_random.best_estimator_.get_params
+
+fig, ax = plt.subplots(figsize=(35,8))
+ax.bar(x_ax, grid_random.best_estimator_.feature_importances_)
+ax.grid
+
+scores_random = cross_val_score(grid_random.best_estimator_, X_1, y, cv=cv_splitter, n_jobs=-1)
+print(scores_random)
+print('Mean (random): '+str(scores_random.mean()))
+print('SD (random): '+str(scores_random.std()))
+
 # ## Test data preprocessing
 
 data_test = pd.read_csv('test.csv')
@@ -278,7 +321,32 @@ submission_logis_5 = pd.DataFrame({'PassengerId': passenger_id, 'Survived': y_te
 existing_file = glob.glob('submission_logis_5.csv')
 assert (not existing_file), 'File already existed.'
 submission_logis_5.to_csv('submission_logis_5.csv', index=False)
-# (This submission got a public score of 0.794)
+# (This submission got a public score of 0.799)
+# -
+# ### 2. Random forrest
+
+
+# +
+y_test_predict_random = grid_random.predict(X_test)
+submission_random_5 = pd.DataFrame({'PassengerId': passenger_id, 
+                                    'Survived': y_test_predict_random})
+
+existing_file = glob.glob('submission_random_5.csv')
+assert (not existing_file), 'File already existed.'
+submission_random_5.to_csv('submission_random_5.csv', index=False)
+# (This submission got a public score of 0.799)
 # -
 
+compare = pd.read_csv('submission_random_2.csv')
+compare
 
+compare.values
+
+submission_random_5
+
+p=np.equal(compare.values, submission_random_5.values)
+# [i, j for i, j in p if ((~i) | (~j))]
+[i[1] for i in p if ~i[1]]
+
+# +
+# Exactly the same predicton
