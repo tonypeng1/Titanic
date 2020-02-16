@@ -13,16 +13,7 @@
 #     name: python3
 # ---
 
-# #### 1. Train data set is visualized in several ways using swarmplot in seaborn to provide guidelines for feature engineering followed by one-hot encoding. A total of 6 features are used:
-# #### (1) Pclass and Sex are used without any modification,
-# #### (2) Fare is binned into 4 groups with 'unknown' and by using bin edges 10.5 and 75,
-# #### (3) SibSp and Parch are added together and binned to unkown, 0 (travel alone), 4 below, and 4 and above to form a new feature,
-# #### (4) Persons with 'Master' in Name are identified and form a new feature,
-# #### (5) Female in Pclass 3 with Fare > 24 is identified and forms a new feature, 
-# #### 2. Eight models with hyper-parameter tuning are constructed for predictions: logistic regression, random forest, gradient boosting, XGBoost, multinomial naive Bayes, k nearest neighbors, stack, and majority vote. The stack model uses all the first 6 models above as the 1st-level models and random forest as the 2nd-level model. 
-# #### 3. In summary, gradient boost and stack models have the highest mean cross-validation scores (both 0.842), followed by random forest and XGBoost (0.837 and 0.836, respectively), followed by logistic regression and k nearest neighbors (0.828 and 0.827, respectively), and multinomial naive Bayes has the lowest score of 0.780.
-# #### However, random forest, together with stack, achieve the highest public scores of 0.799, followed by logistic regression, gradient boost, and XGBoost (all 0.794), followed by k nearest neighbors with 0.789, and multinomial naive Bayes has the lowest public score of 0.746. The majority vote also achieves the highest public score of 0.799.
-# #### It is found that model performance (model's public score) may be highly dependent on the number of features chosen and the ways the features are enginnered.
+# #### (2-15-2020) First tried git control. Apply drop='first' in OneHotEncoder and tries on Logistic regression. 
 
 # %autosave 0
 
@@ -32,10 +23,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import operator
 from scipy.stats import uniform, norm
+import glob
 # %matplotlib inline
 
 from sklearn.metrics import classification_report, confusion_matrix
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV, \
 cross_val_score, KFold, StratifiedKFold
 from sklearn.linear_model import LogisticRegression
@@ -45,6 +37,10 @@ from sklearn.neighbors import KNeighborsClassifier
 import xgboost
 from xgboost import XGBClassifier
 import sklearn
+plt.ion()
+
+pd.set_option('display.max_rows', 200)
+pd.set_option('display.max_columns', 20)
 
 # ## Data visualization
 
@@ -133,12 +129,12 @@ def fill_feature(df):
     df['Pclass'] = df['Pclass'].fillna(-1)
     df['Sex'] = df['Sex'].fillna('Unknown')
     df['SibSp_Parch'] = df['SibSp_Parch'].fillna(-1)
-    df['Fare'] = df['Fare'].fillna(-0.5)
+    df['Fare'] = df['Fare'].fillna(df['Fare'].mean())
 
 def bin_fare_and_SibSpParch(df):
     """Bin Fare and SibSp_Parch based on previous visualization results."""
-    bins = (-1, 0, 10.5, 75, 1500)
-    group_names = ['Unknown', '10.5_below', '10.5_to_75', '75_above']
+    bins = (0, 10.5, 75, 1500)
+    group_names = ['10.5_below', '10.5_to_75', '75_above']
     df['Fare'] = pd.cut(df['Fare'], bins, labels=group_names, right=False)
     
     bins = (-1, -0.1, 0.1, 4, 50)
@@ -162,9 +158,9 @@ X.head(10)
 
 X.info()
 
-ohe = OneHotEncoder(handle_unknown='ignore')
+ohe = OneHotEncoder(drop='first')
 X_1 = ohe.fit_transform(X).toarray()
-list(X_1)[:5] 
+list(X_1)[:10] 
 
 ohe.categories_
 
@@ -206,8 +202,19 @@ logis_best_param = grid_logis.best_params_
 logis_best_param
 # best parameter values to be used in the stack model
 
+# +
+# logis_best_param = grid_logis.best_params_  
+# logis_best_param
+# # best parameter values to be used in the stack model
+# -
+
 results = pd.DataFrame(grid_logis.cv_results_)
 results.iloc[:,4:].sort_values('rank_test_score')
+
+# +
+# results = pd.DataFrame(grid_logis.cv_results_)
+# results.iloc[:,4:].sort_values('rank_test_score')
+# -
 
 x_ax = ohe.get_feature_names(['Pclass', 'Sex', 'Fare', 'SibSp_Parch', 'Name_Master', 
                               'Fem_Hfare_Pcl3'])
@@ -217,10 +224,23 @@ fig, ax = plt.subplots(figsize=(30,8))
 ax.bar(x_ax, grid_logis.best_estimator_.coef_[0])
 ax.grid
 
+# +
+# fig, ax = plt.subplots(figsize=(30,8))
+# ax.bar(x_ax, grid_logis.best_estimator_.coef_[0])
+# ax.grid
+# -
+
 scores_logis = cross_val_score(grid_logis.best_estimator_, X_1, y, cv=cv_splitter, n_jobs=-1)
 print(scores_logis)
 print('Mean (logis): '+str(scores_logis.mean()))
 print('SD (logis): '+str(scores_logis.std()))
+
+# +
+# scores_logis = cross_val_score(grid_logis.best_estimator_, X_1, y, cv=cv_splitter, n_jobs=-1)
+# print(scores_logis)
+# print('Mean (logis): '+str(scores_logis.mean()))
+# print('SD (logis): '+str(scores_logis.std()))
+# -
 
 # ## Test data preprocessing
 
@@ -234,8 +254,18 @@ data_test.info()
 data_transform(data_test)
 data_test.head()
 
+data_test.info()
+
+
+
+data_test['Fare'].value_counts()
+
 X_test = ohe.transform(data_test).toarray()
-list(X_test)[:5]
+list(X_test)[:10]
+
+
+
+
 
 # ## Model Predictions
 
@@ -243,11 +273,11 @@ list(X_test)[:5]
 
 # +
 y_test_predict_logis = grid_logis.predict(X_test)
-submission_logis_2 = pd.DataFrame({'PassengerId': passenger_id, 'Survived': y_test_predict_logis})
+submission_logis_5 = pd.DataFrame({'PassengerId': passenger_id, 'Survived': y_test_predict_logis})
 
-existing_file = glob.glob('submission_logis_2.csv')
+existing_file = glob.glob('submission_logis_5.csv')
 assert (not existing_file), 'File already existed.'
-submission_logis_2.to_csv('submission_logis_2.csv', index=False)
+submission_logis_5.to_csv('submission_logis_5.csv', index=False)
 # (This submission got a public score of 0.794)
 # -
 
